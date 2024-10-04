@@ -57,9 +57,9 @@ def visscal(uvw_part, l_df, m_df, n_df, C_df, constant1, period, gpu_id):
     viss_df = pd.DataFrame(viss_tensor.cpu().numpy(), columns=['viss_real', 'viss_imag'])
 
     # 将结果保存到 CSV 文件
-    viss_df.to_csv(f"viss{period}_{gpu_id}.csv", index=False)
+    viss_df.to_csv(f"torch_10M/viss{period}_{gpu_id}.csv", index=False)
 
-    print(f"结果已保存到 viss{period}_{gpu_id}.csv 文件中。")
+    print(f"结果已保存到 torch_10M/viss{period}_{gpu_id}.csv 文件中。")
 
 
 def process_period(period):
@@ -67,18 +67,18 @@ def process_period(period):
 
     print(f"开始处理第{period}个周期")
 
-    uvw_file = f"uvwMap/uvw{period}frequency10M_new.txt"
-    l_df = pd.read_csv('lmn10M/l.txt', header=None, names=['l'])
-    m_df = pd.read_csv('lmn10M/m.txt', header=None, names=['m'])
-    n_df = pd.read_csv('lmn10M/n.txt', header=None, names=['n'])
-    C_df = pd.read_csv('lmn10M/C.txt', header=None, names=['C'])
+    uvw_file = f"frequency_10M/uvw{period}frequency10M.txt"
+    l_df = pd.read_csv('lmn10M/l10M.txt', header=None, names=['l'])
+    m_df = pd.read_csv('lmn10M/m10M.txt', header=None, names=['m'])
+    n_df = pd.read_csv('lmn10M/n10M.txt', header=None, names=['n'])
+    C_df = pd.read_csv('lmn10M/C10M.txt', header=None, names=['C'])
 
     print("读取l m n C完毕")
 
     # uvw_df分块
     num_gpus = torch.cuda.device_count()
 
-    uvw_df = pd.read_csv(uvw_file, delimiter=' ', header=None, names=['u', 'v', 'w', 'freq'])
+    uvw_df = pd.read_csv(uvw_file, delimiter=' ', header=None, names=['u', 'v', 'w'])
     part_size = len(uvw_df) // num_gpus
     uvw_parts = [uvw_df[i * part_size:(i + 1) * part_size] for i in range(num_gpus)]  
     uvw_parts[-1] = uvw_df[(num_gpus - 1) * part_size:]
@@ -92,15 +92,16 @@ def process_period(period):
     combined_df = pd.DataFrame(columns=['viss_real', 'viss_imag'])
     # 加载并合并每个 CSV 文件
     for gpu_id in range(num_gpus):
-        filename = f"viss{period}_{gpu_id}.csv"
+        filename = f"torch_10M/viss{period}_{gpu_id}.csv"
         df = pd.read_csv(filename)
         combined_df = pd.concat([combined_df, df], ignore_index=True)
 
     # 将合并后的 DataFrame 保存为一个新的 CSV 文件
-    combined_df.to_csv(f"viss{period}.csv", index=False)
+    combined_df.to_csv(f"torch_10M/viss{period}.csv", index=False)
 
 
 if __name__ == "__main__":
     # 处理第一个周期
-    process_period(1)
+    for i in range(1, 31):
+        process_period(i)
 

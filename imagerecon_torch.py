@@ -104,9 +104,9 @@ def main():
         uvw_file = f"uvwMap/uvw{period}frequency10M_new.txt"
         viss_file = f"viss{period}.csv"
 
-        l_df = pd.read_csv('lmn10M/l.txt', header=None, names=['l'])
-        m_df = pd.read_csv('lmn10M/m.txt', header=None, names=['m'])
-        n_df = pd.read_csv('lmn10M/n.txt', header=None, names=['n'])
+        l_df = pd.read_csv('frequency10M/l.txt', header=None, names=['l'])
+        m_df = pd.read_csv('frequency10M/m.txt', header=None, names=['m'])
+        n_df = pd.read_csv('frequency10M/n.txt', header=None, names=['n'])
         nt_df = pd.read_csv('lmn10M/nt.txt', header=None, names=['nt'])
 
         print("读取l m n nt完毕")

@@ -46,7 +46,7 @@ string F_address = "./F_recon_10M/";
 string para;
 string duration = "frequency10M";  // 第几个周期的uvw
 string sufix = ".txt";
-const int amount = 130;  // 一共有多少个周期  15月 * 30天 / 14天/周期
+const int amount = 30;  // 一共有多少个周期  15月 * 30天 / 14天/周期
 
 // 1 M
 const int uvw_presize = 14400000;
@@ -282,7 +282,7 @@ int vissGen(int id, int totalnode, int RES)
     CHECK(cudaDeviceSynchronize());
     std::cout << "C is computed in GPU 0!" << std::endl;
 
-    // string computeC_dir = "computeC_div_n.txt";
+    // string computeC_dir = "frequency_10M/C.txt";
     // writeToFile(dC, computeC_dir);
 
     // 将计算得到的C复制回主机
