@@ -709,13 +709,13 @@ void MIncline(int index, float frequency, float stride, int gpu_id) {
 
 int main()
 {
-    int periods = 226;
+    int periods = 2;
     float stride = 0.01/3;
     float frequency = 3e7;
 
     // auto pos_start = std::chrono::high_resolution_clock::now();
 
-    for (int index=130; index<=periods; index++){
+    for (int index=1; index<=periods; index++){
         MIncline(index, frequency, stride, 0); 
     }
     

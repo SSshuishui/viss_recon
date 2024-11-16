@@ -4,11 +4,13 @@ import time
 from multiprocessing import Pool
 
 
-def visscal(uvw_part, l_df, m_df, n_df, C_df, constant1, period, gpu_id):
+def visscal(uvw_part, l_df, m_df, n_df, C_df, period, gpu_id, save_id):
     RES = 20940
     dl = 2*RES/(RES-1)
     dm = 2*RES/(RES-1)
     dn = 2*RES/(RES-1)
+
+    constant1 = -2 * torch.pi * torch.tensor(1j, device=f"cuda:{gpu_id}")
 
     # 记录生成开始时间
     start_time = time.time()
@@ -57,51 +59,63 @@ def visscal(uvw_part, l_df, m_df, n_df, C_df, constant1, period, gpu_id):
     viss_df = pd.DataFrame(viss_tensor.cpu().numpy(), columns=['viss_real', 'viss_imag'])
 
     # 将结果保存到 CSV 文件
-    viss_df.to_csv(f"torch_10M/viss{period}_{gpu_id}.csv", index=False)
+    viss_df.to_csv(f"torch_10M/viss{period}_{save_id}.csv", index=False)
 
-    print(f"结果已保存到 torch_10M/viss{period}_{gpu_id}.csv 文件中。")
+    print(f"结果已保存到 torch_10M/viss{period}_{save_id}.csv 文件中。")
 
 
 def process_period(period):
-    constant1 = -2 * torch.pi * 1j
 
     print(f"开始处理第{period}个周期")
 
     uvw_file = f"frequency_10M/uvw{period}frequency10M.txt"
-    l_df = pd.read_csv('lmn10M/l10M.txt', header=None, names=['l'])
-    m_df = pd.read_csv('lmn10M/m10M.txt', header=None, names=['m'])
-    n_df = pd.read_csv('lmn10M/n10M.txt', header=None, names=['n'])
+    l_df = pd.read_csv('lmn10M/l10M_dup.txt', header=None, names=['l'])
+    m_df = pd.read_csv('lmn10M/m10M_dup.txt', header=None, names=['m'])
+    n_df = pd.read_csv('lmn10M/n10M_dup.txt', header=None, names=['n'])
     C_df = pd.read_csv('lmn10M/C10M.txt', header=None, names=['C'])
 
     print("读取l m n C完毕")
+    print(l_df.shape[0], m_df.shape[0], n_df.shape[0], C_df.shape[0])
 
     # uvw_df分块
     num_gpus = torch.cuda.device_count()
 
     uvw_df = pd.read_csv(uvw_file, delimiter=' ', header=None, names=['u', 'v', 'w'])
-    part_size = len(uvw_df) // num_gpus
-    uvw_parts = [uvw_df[i * part_size:(i + 1) * part_size] for i in range(num_gpus)]  
-    uvw_parts[-1] = uvw_df[(num_gpus - 1) * part_size:]
+    # part_size = len(uvw_df) // num_gpus
+    # uvw_parts = [uvw_df[i * part_size:(i + 1) * part_size] for i in range(num_gpus)]  
+    # uvw_parts[-1] = uvw_df[(num_gpus - 1) * part_size:]
+
+    part_size = 795000
+    num_parts = len(uvw_df) // part_size + 1
+    print("num_parts: ", num_parts)
+
+    uvw_parts = [uvw_df[i * part_size:(i + 1) * part_size] for i in range(num_parts)]
+    uvw_parts[-1] = uvw_df[(num_parts - 1) * part_size:]
+
+    print(len(uvw_parts))
+    print('0: ', uvw_parts[0].shape)
+    print('-1: ', uvw_parts[-1].shape)
+
+
+    for i in range(0, num_parts//num_gpus+1):
+        for gpu_id,uvw_part in enumerate(uvw_parts[i*num_gpus:(i+1)*num_gpus]):
+            print("i: ", i, gpu_id, gpu_id+i*num_gpus)
 
     # 调用函数并分发给每个GPU处理
+    # with Pool(processes=num_gpus) as pool:
+    #     pool.starmap(visscal, [(uvw_part, l_df, m_df, n_df, C_df, period, gpu_id) for gpu_id, uvw_part in enumerate(uvw_parts)])
+
     with Pool(processes=num_gpus) as pool:
-        pool.starmap(visscal, [(uvw_part, l_df, m_df, n_df, C_df, constant1, period, gpu_id) for gpu_id, uvw_part in enumerate(uvw_parts)])
-
-
-    # 创建一个空的 DataFrame 用于存储合并后的数据
-    combined_df = pd.DataFrame(columns=['viss_real', 'viss_imag'])
-    # 加载并合并每个 CSV 文件
-    for gpu_id in range(num_gpus):
-        filename = f"torch_10M/viss{period}_{gpu_id}.csv"
-        df = pd.read_csv(filename)
-        combined_df = pd.concat([combined_df, df], ignore_index=True)
-
-    # 将合并后的 DataFrame 保存为一个新的 CSV 文件
-    combined_df.to_csv(f"torch_10M/viss{period}.csv", index=False)
+        for i in range(0, num_parts//num_gpus+1):
+            if i == 5:
+                print("处理i: ", i)
+                # 为每个GPU分配一个任务
+                args = [(uvw_part, l_df, m_df, n_df, C_df, period, gpu_id, gpu_id+i*num_gpus) for gpu_id,uvw_part in enumerate(uvw_parts[i*num_gpus:(i+1)*num_gpus])]
+                pool.starmap(visscal, args)
+   
 
 
 if __name__ == "__main__":
     # 处理第一个周期
-    for i in range(1, 31):
-        process_period(i)
+    process_period(2)
 

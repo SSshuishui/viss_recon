@@ -1,84 +1,76 @@
 import torch
 import pandas as pd
 import time
+from multiprocessing import Pool
+from datetime import datetime, timedelta
 
-def imagerecon(uvw_file, viss_file, l_df, m_df, n_df, nt_df, constant1, constant2, period):
-    # 读取viss文件
-    viss_df = pd.read_csv(viss_file)
-    viss_df['viss'] = viss_df['viss_real'] + viss_df['viss_imag']*1j
-    print("读取 viss 完毕")
-
-    # 读取uvw文件
-    uvw_df = pd.read_csv(uvw_file, delimiter=' ', header=None, names=['u', 'v', 'w', 'freq'])
-    print("读取 uvw 完毕")
-
+def imagerecon(uvw_df, viss_df, l_part, m_part, n_part, period, gpu_id, save_id):
     RES = 20940
     dl = 2*RES/(RES-1)
     dm = 2*RES/(RES-1)
     dn = 2*RES/(RES-1)
 
+    assert len(uvw_df) == len(viss_df)
     # 记录生成开始时间
     start_time = time.time()
+
+    constant1 = -2 * torch.pi * torch.tensor(1j, device=f"cuda:{gpu_id}")
+    constant2 = 2 * torch.pi * torch.tensor(1j, device=f"cuda:{gpu_id}")
     
     # 将数据转换为PyTorch张量并移动到GPU上
-    viss_tensor = torch.tensor(viss_df['viss'].values, device='cuda')
-    uvw_tensor = torch.tensor(uvw_df[['u', 'v', 'w']].values, device='cuda', dtype=torch.float32)
-    uvwFreqMap_tensor = torch.tensor(uvw_df['freq'].values, device='cuda', dtype=torch.float32)
+    viss_tensor = torch.tensor(viss_df['viss'].values, device=f'cuda:{gpu_id}')
+    u_tensor = torch.tensor(uvw_df['u'].values, device=f'cuda:{gpu_id}', dtype=torch.float32)
+    v_tensor = torch.tensor(uvw_df['v'].values, device=f'cuda:{gpu_id}', dtype=torch.float32)
+    w_tensor = torch.tensor(uvw_df['w'].values, device=f'cuda:{gpu_id}', dtype=torch.float32)
+    uvwFreqMap_tensor = torch.tensor(uvw_df['freq'].values, device=f'cuda:{gpu_id}', dtype=torch.float32)
 
-    l_tensor = torch.tensor(l_df['l'].values, device='cuda', dtype=torch.float32)
-    m_tensor = torch.tensor(m_df['m'].values, device='cuda', dtype=torch.float32)
-    n_tensor = torch.tensor(n_df['n'].values, device='cuda', dtype=torch.float32)
-    nt_tensor = torch.tensor(nt_df['nt'].values, device='cuda', dtype=torch.float32)
-    print("uvw_tensor: ", uvw_tensor.shape)
+    l_tensor = torch.tensor(l_part['l'].values, device=f'cuda:{gpu_id}', dtype=torch.float32)
+    m_tensor = torch.tensor(m_part['m'].values, device=f'cuda:{gpu_id}', dtype=torch.float32)
+    n_tensor = torch.tensor(n_part['n'].values, device=f'cuda:{gpu_id}', dtype=torch.float32)
+    print("u_tensor: ", u_tensor.shape)
+    print("v_tensor: ", v_tensor.shape)
+    print("w_tensor: ", w_tensor.shape)
     print("viss_tensor: ", viss_tensor.shape)
     print("uvwFreqMap_tensor: ", uvwFreqMap_tensor.shape)
     print("l_tensor: ", l_tensor.shape)
     print("m_tensor: ", m_tensor.shape)
     print("n_tensor: ", n_tensor.shape)
-    print("nt_tensor: ", nt_tensor.shape)
 
-    # 采样 l m n
-    target_rows = 2094 * 2094
-    num_elements = l_tensor.numel()
-    interval = num_elements // target_rows
-    # 生成均匀间隔的索引列表
-    indices = torch.arange(0, num_elements, interval)[:target_rows]
-    l_tensor = l_tensor[indices] 
-    m_tensor = m_tensor[indices]  
-    n_tensor = n_tensor[indices]  
-    nt_tensor = nt_tensor[indices]  
-    print("l_tensor shape: ", l_tensor.shape)
-    print("m_tensor shape: ", m_tensor.shape)
-    print("n_tensor shape: ", n_tensor.shape)
-    print("nt_tensor shape: ", nt_tensor.shape)
-
-    # viss 去除相位
-    viss_tensor = viss_tensor * torch.exp(constant1 * uvw_tensor[:, 2] / dn)
+    del l_part
+    del m_part
+    del n_part
+    del uvw_df
+    del viss_df
 
     l_tensor = l_tensor / dl
     m_tensor = m_tensor / dm
     n_tensor = n_tensor / dn
-    
-    print("viss 去除相位")
+    print("l m n 预处理完成")
+
+    # viss 去除相位
+    viss_tensor = viss_tensor * torch.exp(constant1 * w_tensor / dn)
+    print("viss 去除相位完成")
 
     # 存储 imagerecon的部分
-    image_tensor = torch.zeros(len(l_tensor), dtype=torch.float32, device='cuda')
+    image_tensor = torch.zeros(len(l_tensor), dtype=torch.float32, device=f'cuda:{gpu_id}')
 
     # 遍历 uvw_df 中的每一行
-    for index, _ in enumerate(l_tensor):
-        row_start_time = time.time()
+    for index in range(l_tensor.shape[0]):
+        # row_start_time = time.time()
+        if index % 5000000 == 0:
+            print(f"GPU: {gpu_id} - 已处理 {index} 行")
 
-        # 计算复数指数部分
-        temp_y = constant2 * (uvw_tensor[:, 0]*l_tensor[index] + uvw_tensor[:, 1]*m_tensor[index] + uvw_tensor[:, 2]*n_tensor[index]) 
+        # # 计算复数指数部分
+        temp_y = constant2 * (u_tensor*l_tensor[index] + v_tensor*m_tensor[index] + w_tensor*n_tensor[index]) 
         
-        # 计算结果
-        image = torch.sum(uvwFreqMap_tensor * viss_tensor * torch.exp(temp_y)) * torch.abs(nt_tensor[index]) / len(uvw_tensor)
+        # # 计算结果
+        image = torch.sum(uvwFreqMap_tensor * viss_tensor * torch.exp(temp_y)) / len(u_tensor)
 
         image_tensor[index] = image.real
    
-        row_end_time = time.time()
-        row_elapsed_time = row_end_time - row_start_time
-        print("Generated row {} in {:.4f} seconds".format(index, row_elapsed_time))
+        # row_end_time = time.time()
+        # row_elapsed_time = row_end_time - row_start_time
+        # print("Generated row {} in {:.4f} seconds".format(index, row_elapsed_time))
     
     # 记录生成结束时间
     end_time = time.time()
@@ -89,31 +81,105 @@ def imagerecon(uvw_file, viss_file, l_df, m_df, n_df, nt_df, constant1, constant
     image_df = pd.DataFrame(image_tensor.cpu().numpy(), columns=['imagerecon_real'])
 
     # 将结果保存到 CSV 文件
-    image_df.to_csv(f"image{period}.txt", sep='\t', header=False, index=False)
+    image_df.to_csv(f"torch_10M/image{period}_{save_id}.txt", sep='\t', header=False, index=False)
 
-    print(f"结果已保存到 image{period}.txt 文件中。")
+    print(f"结果已保存到 torch_10M/image{period}_{save_id}.txt 文件中。")
 
 
-def main():
-    # matlab中pi是3.1416
-    constant1 = -2 * torch.pi * 1j
-    constant2 = 2 * torch.pi * 1j
+def process_period(period):
+
+    print(f"开始处理第{period}个周期")
+    uvw_file = f"frequency_10M/updated_uvw{period}frequency10M.txt"
+    viss_file = f"torch_10M/viss{period}.csv"
+
+    viss_df = pd.read_csv(viss_file)
+    viss_df['viss'] = viss_df['viss_real'] + viss_df['viss_imag']*1j
+    print("读取 viss 完毕")
+
+    l_df = pd.read_csv('lmn10M/l10M.txt', header=None, names=['l'])
+    m_df = pd.read_csv('lmn10M/m10M.txt', header=None, names=['m'])
+    n_df = pd.read_csv('lmn10M/n10M.txt', header=None, names=['n'])
+
+    print("读取l m n完毕", l_df.shape)
+
+    # uvw_df分块
+    num_gpus = torch.cuda.device_count()
+    print("num_gpus: ", num_gpus)
+
+    uvw_df = pd.read_csv(uvw_file, delimiter=' ', header=None, names=['u', 'v', 'w', 'freq'])
+    print("读取 uvw 完毕", uvw_df.shape)
+
+    part_size = len(l_df) // num_gpus
+    l_parts = [l_df[i * part_size:(i + 1) * part_size] for i in range(num_gpus)]  
+    m_parts = [m_df[i * part_size:(i + 1) * part_size] for i in range(num_gpus)]  
+    n_parts = [n_df[i * part_size:(i + 1) * part_size] for i in range(num_gpus)]  
+    l_parts[-1] = l_df[(num_gpus - 1) * part_size:]
+    m_parts[-1] = m_df[(num_gpus - 1) * part_size:]
+    n_parts[-1] = n_df[(num_gpus - 1) * part_size:]
+    print(l_parts[0].shape, l_parts[1].shape, l_parts[2].shape)
+    del l_df, m_df, n_df
+
+
+    l_combined = l_parts[-1]
+    m_combined = m_parts[-1]
+    n_combined = n_parts[-1]
+    del l_parts, m_parts, n_parts
+
+    print(l_combined.shape, m_combined.shape, n_combined.shape)
+
+    # 重新计算每个GPU应该分配的数据量
+    # part_size = len(l_combined) // num_gpus
+    part_size = 14700000
+    num_parts = len(l_combined) // part_size + 1
+
+    print("num_parts: ", num_parts)
+
+    # 重新分配数据到3个GPU
+    l_parts = [l_combined[i * part_size:(i + 1) * part_size] for i in range(num_parts)]
+    m_parts = [m_combined[i * part_size:(i + 1) * part_size] for i in range(num_parts)]
+    n_parts = [n_combined[i * part_size:(i + 1) * part_size] for i in range(num_parts)]
+    l_parts[-1] = l_combined[(num_parts - 1) * part_size:]
+    m_parts[-1] = m_combined[(num_parts - 1) * part_size:]
+    n_parts[-1] = n_combined[(num_parts - 1) * part_size:]
+
+    print(len(l_parts))
+    print('0: ', l_parts[0].shape)
+    print('-1: ', l_parts[-1].shape)
+
+
+    batches = list(zip(l_parts, m_parts, n_parts))
+    batch_size = num_gpus
+    gpu_chunks = [batches[i:i + batch_size] for i in range(0, len(batches), batch_size)]
+
+    for gpu_id, batch in enumerate(gpu_chunks):
+        print("gpu_id:", gpu_id)
+        for i, (l, m, n) in enumerate(batch):
+            print("i: ", i, i+gpu_id*num_gpus+21)
     
-    for period in range(1, 131): 
-        print(f"开始处理第{period}个周期")
-        uvw_file = f"uvwMap/uvw{period}frequency10M_new.txt"
-        viss_file = f"viss{period}.csv"
+    
+    # 调用函数并分发给每个GPU处理
+    # with Pool(processes=num_gpus) as pool:
+    #     pool.starmap(imagerecon, [
+    #         (uvw_df, viss_df, l_part, m_part, n_part, period, gpu_id)
+    #         for gpu_id, (l_part, m_part, n_part) in enumerate(zip(l_parts, m_parts, n_parts))
+    #     ])
 
-        l_df = pd.read_csv('frequency10M/l.txt', header=None, names=['l'])
-        m_df = pd.read_csv('frequency10M/m.txt', header=None, names=['m'])
-        n_df = pd.read_csv('frequency10M/n.txt', header=None, names=['n'])
-        nt_df = pd.read_csv('lmn10M/nt.txt', header=None, names=['nt'])
+    with Pool(processes=num_gpus) as pool:
+        for gpu_id, batch in enumerate(gpu_chunks):
+            if gpu_id == 1 or gpu_id == 2:
+                # 为每个GPU分配一个任务
+                args = [(uvw_df, viss_df, l, m, n, period, i, i+gpu_id*num_gpus+21) for i, (l, m, n) in enumerate(batch)]
+                pool.starmap(imagerecon, args)
+   
+    
+    # del l_parts, m_parts, n_parts
+    
 
-        print("读取l m n nt完毕")
 
-        imagerecon(uvw_file, viss_file, l_df, m_df, n_df, nt_df, constant1, constant2, period)
 
 
 if __name__ == "__main__":
-    main()
+    # target_time = '01:00'
+    # wait_until(target_time)
+    process_period(1)
 

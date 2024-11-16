@@ -150,6 +150,7 @@ __global__ void uvwPosition(float* x, float* y, float* z, float* xt, float* yt, 
     }
 }
 
+
 __global__ void computeUVW(float *xt, float *yt, float *zt, thrust::tuple<float, float, float> *UVWHash, int OrbitCounts, int OrbitRes, float lambda, int m, int n) {
     int globalIdx = blockIdx.x * blockDim.x + threadIdx.x;    // OrbitCounts*OrbitRes/3  大小和xt yt zt的1/8维度一样
     int tmp = OrbitRes*OrbitCounts/3;
@@ -158,7 +159,6 @@ __global__ void computeUVW(float *xt, float *yt, float *zt, thrust::tuple<float,
     float w_val = ceil((zt[tmp * n + globalIdx] - zt[tmp * m + globalIdx]) * 1e3 / lambda);
     UVWHash[globalIdx] = thrust::make_tuple(u_val, v_val, w_val);
 }
-
 
 
 void writeToFile(const thrust::device_vector<float>& device_vector, const std::string& filename, int satnum, int columns) {

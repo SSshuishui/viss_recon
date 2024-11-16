@@ -100,35 +100,35 @@
 # ===========================================================================================================================
 
 # 保存lmn
-import pandas as pd
-# 读取CSV文件
-df = pd.read_csv('lmn10M/lmnC.csv', header=0)
+# import pandas as pd
+# # 读取CSV文件
+# df = pd.read_csv('lmn10M/lmnC.csv', header=0)
 
-# 提取FF列
-l_column = df['l']
-# 将数据保存到FF.txt文件中
-with open('lmn10M/l10M.txt', 'w') as f:
-    for value in l_column:
-        f.write(str(value) + '\n')
-f.close()
-print("l列已保存到l10M.txt文件中")
-del l_column
+# # 提取FF列
+# l_column = df['l']
+# # 将数据保存到FF.txt文件中
+# with open('lmn10M/l10M.txt', 'w') as f:
+#     for value in l_column:
+#         f.write(str(value) + '\n')
+# f.close()
+# print("l列已保存到l10M.txt文件中")
+# del l_column
 
 
-m_column = df['m']
-with open('lmn10M/m10M.txt', 'w') as f:
-    for value in m_column:
-        f.write(str(value) + '\n')
-f.close()
-print("m列已保存到m10M.txt文件中")
-del m_column
+# m_column = df['m']
+# with open('lmn10M/m10M.txt', 'w') as f:
+#     for value in m_column:
+#         f.write(str(value) + '\n')
+# f.close()
+# print("m列已保存到m10M.txt文件中")
+# del m_column
 
-n_column = df['n']
-with open('lmn10M/n10M.txt', 'w') as f:
-    for value in n_column:
-        f.write(str(value) + '\n')
-f.close()
-print("n列已保存到n10M.txt文件中")
+# n_column = df['n']
+# with open('lmn10M/n10M.txt', 'w') as f:
+#     for value in n_column:
+#         f.write(str(value) + '\n')
+# f.close()
+# print("n列已保存到n10M.txt文件中")
 
 # ===========================================================================================================================
 
@@ -203,3 +203,5 @@ print("n列已保存到n10M.txt文件中")
 #                 outfile.write(infile.read())
 
 # print(f'All .txt files in {directory} have been merged into {output_file}.')
+
+
