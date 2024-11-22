@@ -98,7 +98,7 @@ def process_period(period):
 
 
     for i in range(0, num_parts//num_gpus+1):
-        for gpu_id,uvw_part in enumerate(uvw_parts[i*num_gpus:(i+1)*num_gpus]):
+        for gpu_id,_ in enumerate(uvw_parts[i*num_gpus:(i+1)*num_gpus]):
             print("i: ", i, gpu_id, gpu_id+i*num_gpus)
 
     # 调用函数并分发给每个GPU处理
@@ -107,7 +107,7 @@ def process_period(period):
 
     with Pool(processes=num_gpus) as pool:
         for i in range(0, num_parts//num_gpus+1):
-            if i == 5:
+            if i == 0:
                 print("处理i: ", i)
                 # 为每个GPU分配一个任务
                 args = [(uvw_part, l_df, m_df, n_df, C_df, period, gpu_id, gpu_id+i*num_gpus) for gpu_id,uvw_part in enumerate(uvw_parts[i*num_gpus:(i+1)*num_gpus])]
@@ -117,5 +117,5 @@ def process_period(period):
 
 if __name__ == "__main__":
     # 处理第一个周期
-    process_period(2)
+    process_period(3)
 

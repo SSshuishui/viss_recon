@@ -12,7 +12,7 @@ input_folder = './'
 output_folder = './'
 
 # 遍历文件
-for i in range(1, 31):
+for i in range(3, 5):
     # 构建文件名
     input_file = f'uvw{i}frequency10M.txt'
     output_file = f'updated_{input_file}'
