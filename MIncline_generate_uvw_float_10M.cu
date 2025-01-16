@@ -404,7 +404,7 @@ void MIncline(int index, float frequency, float stride, int gpu_id) {
     // 计算经过的时间
     float dupMS = 0;
     CHECK(cudaEventElapsedTime(&dupMS, dupstart, dupstop));
-    printf("Frequency %f Index %d On GPU %d Duplicate Cost Time is: %f s\n", frequency, index, gpu_id, dupMS/1000);
+    printf("Frequency %.1f Index %d On GPU %d Duplicate Cost Time is: %f s\n", frequency, index, gpu_id, dupMS/1000);
     // 销毁事件
     cudaEventDestroy(dupstart);
     cudaEventDestroy(dupstop);
@@ -432,7 +432,7 @@ void MIncline(int index, float frequency, float stride, int gpu_id) {
     // 计算经过的时间
     float saveMS = 0;
     CHECK(cudaEventElapsedTime(&saveMS, savestart, savestop));
-    printf("Frequency %f Index %d On GPU %d Save txt Cost Time is: %f s\n", frequency, index, gpu_id, saveMS/1000);
+    printf("Frequency %.1f Index %d On GPU %d Save txt Cost Time is: %f s\n", frequency, index, gpu_id, saveMS/1000);
     // 销毁事件
     cudaEventDestroy(savestart);
     cudaEventDestroy(savestop);

@@ -10,10 +10,10 @@ def main():
     del l, m, n
 
     # 读取去重数据
-    l1 = pd.read_csv('lmn10M/l10M_dup.txt', header=None, names=['l'])
-    m1 = pd.read_csv('lmn10M/m10M_dup.txt', header=None, names=['m'])
-    n1 = pd.read_csv('lmn10M/n10M_dup.txt', header=None, names=['n'])
-    values = pd.read_csv('torch_10M/combined.txt', header=None, names=['value'])
+    l1 = pd.read_csv('lmn10M/l.txt', header=None, names=['l'], skiprows=1)
+    m1 = pd.read_csv('lmn10M/m.txt', header=None, names=['m'])
+    n1 = pd.read_csv('lmn10M/n.txt', header=None, names=['n'])
+    values = pd.read_csv(f'cudaF/F{period}period10M.txt', header=None, names=['value'])
     lmn_dup = pd.concat([l1, m1, n1, values], axis=1)
     del l1, m1, n1, values
 
@@ -30,8 +30,10 @@ def main():
     else:
         print("最后一列不包含NaN值。")
     
-    merge_df['value'].to_csv('lmn10M/period1.txt', header=False, index=False)
+    merge_df['value'].to_csv(f'cudaF/period{period}.txt', header=False, index=False)
     print("保存完成！")
 
 if __name__ == "__main__":
+    period = 30
+    print("period: ", period)
     main()

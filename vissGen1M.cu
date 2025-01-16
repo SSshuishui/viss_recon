@@ -46,7 +46,7 @@ string F_address = "./F_recon_1M/";
 string para;
 string duration = "frequency1M";  // 第几个周期的uvw
 string sufix = ".txt";
-const int amount = 42;  // 一共有多少个周期  15月 * 30天 / 14天/周期
+const int amount = 130;  // 一共有多少个周期  15月 * 30天 / 14天/周期
 
 // 1 M
 const int uvw_presize = 4000000;
@@ -205,7 +205,8 @@ int vissGen(int id, int totalnode, int RES)
     }
     for (int i = 0; i < NX_index && NXFile.good() && FFFile.good(); ++i) {
         NXFile >> cNX[i];
-        FFFile >> cFF[i];
+        // FFFile >> cFF[i];
+        cFF[i] = 1;
     }
     lFile.close();
     mFile.close();
@@ -491,7 +492,7 @@ int vissGen(int id, int totalnode, int RES)
                 thrust::host_vector<Complex> extendF(NX_index);
 
                 std::ofstream ExFile;
-                string para = "Ex";
+                string para = "All1_Ex";
                 string address_Ex = F_address + para + to_string(p+1) + duration + sufix;
                 cout << "address_Ex: " << address_Ex << endl;
                 ExFile.open(address_Ex);

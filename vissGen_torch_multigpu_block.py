@@ -63,12 +63,12 @@ def visscal(uvw_part, l_df, m_df, n_df, C_df, period, gpu_id, save_id):
     print(f"结果已保存到 torch_10M/viss{period}_{save_id}.csv 文件中。")
 
 
-def process_period(period, block):
+def process_period(period, block, part_size, num_gpus):
 
     print(f"开始处理第{period}个周期")
     print(f"开始处理第{block}个块")
 
-    uvw_file = f"frequency_10M/uvw{period}frequency10M.txt"
+    uvw_file = f"frequency_10M/updated_uvw{period}frequency10M.txt"
     l_df = pd.read_csv('lmn10M/l10M_dup.txt', header=None, names=['l'])
     m_df = pd.read_csv('lmn10M/m10M_dup.txt', header=None, names=['m'])
     n_df = pd.read_csv('lmn10M/n10M_dup.txt', header=None, names=['n'])
@@ -78,14 +78,10 @@ def process_period(period, block):
     print(l_df.shape[0], m_df.shape[0], n_df.shape[0], C_df.shape[0])
 
     # uvw_df分块
-    num_gpus = torch.cuda.device_count()
+    uvw_df = pd.read_csv(uvw_file, delimiter=' ', header=None, names=['u', 'v', 'w', 'freq'])
+    # 删除'freq'列
+    uvw_df = uvw_df.drop('freq', axis=1)
 
-    uvw_df = pd.read_csv(uvw_file, delimiter=' ', header=None, names=['u', 'v', 'w'])
-    # part_size = len(uvw_df) // num_gpus
-    # uvw_parts = [uvw_df[i * part_size:(i + 1) * part_size] for i in range(num_gpus)]  
-    # uvw_parts[-1] = uvw_df[(num_gpus - 1) * part_size:]
-
-    part_size = 795000
     num_parts = len(uvw_df) // part_size + 1
     print("num_parts: ", num_parts)
 
@@ -101,10 +97,6 @@ def process_period(period, block):
         for gpu_id,_ in enumerate(uvw_parts[i*num_gpus:(i+1)*num_gpus]):
             print("i: ", i, gpu_id, gpu_id+i*num_gpus)
 
-    # 调用函数并分发给每个GPU处理
-    # with Pool(processes=num_gpus) as pool:
-    #     pool.starmap(visscal, [(uvw_part, l_df, m_df, n_df, C_df, period, gpu_id) for gpu_id, uvw_part in enumerate(uvw_parts)])
-
     with Pool(processes=num_gpus) as pool:
         for i in range(0, num_parts//num_gpus+1):
             if i == block:
@@ -116,8 +108,23 @@ def process_period(period, block):
     torch.cuda.empty_cache()
 
 if __name__ == "__main__":
-    # 处理第一个周期
-    process_period(6, 4)
-    print("第3个周期处理完成，开始处理第4个周期")
-    process_period(6, 5)
+    # 处理一个周期
+    # 总行数是不超过 14323000 n个GPU，每个GPU处理part_size行
+    # 需要的block数就是 14323000 // (n * part_size) + 1， 最好保持14350000 / (n * part_size)差不多是整数（1.98这种），而不是比如2.07这种
+    # 比如设置 part_size = 896875, 用8张卡， 那么就需要 block = 1.996， 不超过2， 也就是两天晚上跑完
+    # 运行的时候就是 两天晚上跑， 第一天跑 process_period(period, 0, part_size, num_gpus), 第二天跑 process_period(period, 1, part_size, num_gpus)
+
+
+    # 跑的时候可以先测试把38 和 48-51行注释打开，看一下一行是多少秒能算完，然后估计一下一晚上能跑多少行，再设置part_size
+
+    part_size = 726050
+    num_gpus = torch.cuda.device_count()
+    print("num_gpus: ", num_gpus)
+
+    lines = 14323000
+    print("总行数: ", lines)
+    print("总块数目：" , lines // (num_gpus * part_size))  
+
+    process_period(7, 0, part_size, num_gpus)
+
 

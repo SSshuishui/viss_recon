@@ -86,9 +86,10 @@ def imagerecon(uvw_df, viss_df, l_part, m_part, n_part, period, gpu_id, save_id)
     print(f"结果已保存到 torch_10M/image{period}_{save_id}.txt 文件中。")
 
 
-def process_period(period):
+def process_period(period, block):
 
     print(f"开始处理第{period}个周期")
+    print(f"开始处理第{block}个块")
     uvw_file = f"frequency_10M/updated_uvw{period}frequency10M.txt"
     viss_file = f"torch_10M/viss{period}.csv"
 
@@ -96,9 +97,9 @@ def process_period(period):
     viss_df['viss'] = viss_df['viss_real'] + viss_df['viss_imag']*1j
     print("读取 viss 完毕")
 
-    l_df = pd.read_csv('lmn10M/l10M.txt', header=None, names=['l'])
-    m_df = pd.read_csv('lmn10M/m10M.txt', header=None, names=['m'])
-    n_df = pd.read_csv('lmn10M/n10M.txt', header=None, names=['n'])
+    l_df = pd.read_csv('lmn10M/l10M_dup.txt', header=None, names=['l'])
+    m_df = pd.read_csv('lmn10M/m10M_dup.txt', header=None, names=['m'])
+    n_df = pd.read_csv('lmn10M/n10M_dup.txt', header=None, names=['n'])
 
     print("读取l m n完毕", l_df.shape)
 
@@ -109,77 +110,43 @@ def process_period(period):
     uvw_df = pd.read_csv(uvw_file, delimiter=' ', header=None, names=['u', 'v', 'w', 'freq'])
     print("读取 uvw 完毕", uvw_df.shape)
 
-    part_size = len(l_df) // num_gpus
-    l_parts = [l_df[i * part_size:(i + 1) * part_size] for i in range(num_gpus)]  
-    m_parts = [m_df[i * part_size:(i + 1) * part_size] for i in range(num_gpus)]  
-    n_parts = [n_df[i * part_size:(i + 1) * part_size] for i in range(num_gpus)]  
-    l_parts[-1] = l_df[(num_gpus - 1) * part_size:]
-    m_parts[-1] = m_df[(num_gpus - 1) * part_size:]
-    n_parts[-1] = n_df[(num_gpus - 1) * part_size:]
-    print(l_parts[0].shape, l_parts[1].shape, l_parts[2].shape)
-    del l_df, m_df, n_df
-
-
-    l_combined = l_parts[-1]
-    m_combined = m_parts[-1]
-    n_combined = n_parts[-1]
-    del l_parts, m_parts, n_parts
-
-    print(l_combined.shape, m_combined.shape, n_combined.shape)
-
-    # 重新计算每个GPU应该分配的数据量
-    # part_size = len(l_combined) // num_gpus
     part_size = 14700000
-    num_parts = len(l_combined) // part_size + 1
-
+    num_parts = len(l_df) // part_size + 1
     print("num_parts: ", num_parts)
 
-    # 重新分配数据到3个GPU
-    l_parts = [l_combined[i * part_size:(i + 1) * part_size] for i in range(num_parts)]
-    m_parts = [m_combined[i * part_size:(i + 1) * part_size] for i in range(num_parts)]
-    n_parts = [n_combined[i * part_size:(i + 1) * part_size] for i in range(num_parts)]
-    l_parts[-1] = l_combined[(num_parts - 1) * part_size:]
-    m_parts[-1] = m_combined[(num_parts - 1) * part_size:]
-    n_parts[-1] = n_combined[(num_parts - 1) * part_size:]
+    l_parts = [l_df[i * part_size:(i + 1) * part_size] for i in range(num_parts)]  
+    m_parts = [m_df[i * part_size:(i + 1) * part_size] for i in range(num_parts)]  
+    n_parts = [n_df[i * part_size:(i + 1) * part_size] for i in range(num_parts)]  
+    l_parts[-1] = l_df[(num_parts - 1) * part_size:]
+    m_parts[-1] = m_df[(num_parts - 1) * part_size:]
+    n_parts[-1] = n_df[(num_parts - 1) * part_size:]
 
-    print(len(l_parts))
     print('0: ', l_parts[0].shape)
     print('-1: ', l_parts[-1].shape)
-
+    del l_df, m_df, n_df
 
     batches = list(zip(l_parts, m_parts, n_parts))
     batch_size = num_gpus
-    gpu_chunks = [batches[i:i + batch_size] for i in range(0, len(batches), batch_size)]
+    gpu_chunks = [batches[i : i+batch_size] for i in range(0, len(batches), batch_size)]
 
     for gpu_id, batch in enumerate(gpu_chunks):
         print("gpu_id:", gpu_id)
-        for i, (l, m, n) in enumerate(batch):
-            print("i: ", i, i+gpu_id*num_gpus+21)
+        for i, (_, _, _) in enumerate(batch):
+            print("i: ", i, i+gpu_id*num_gpus)
     
-    
-    # 调用函数并分发给每个GPU处理
-    # with Pool(processes=num_gpus) as pool:
-    #     pool.starmap(imagerecon, [
-    #         (uvw_df, viss_df, l_part, m_part, n_part, period, gpu_id)
-    #         for gpu_id, (l_part, m_part, n_part) in enumerate(zip(l_parts, m_parts, n_parts))
-    #     ])
 
     with Pool(processes=num_gpus) as pool:
         for gpu_id, batch in enumerate(gpu_chunks):
-            if gpu_id == 1 or gpu_id == 2:
+            if gpu_id == block:
                 # 为每个GPU分配一个任务
-                args = [(uvw_df, viss_df, l, m, n, period, i, i+gpu_id*num_gpus+21) for i, (l, m, n) in enumerate(batch)]
+                args = [(uvw_df, viss_df, l, m, n, period, i, i+gpu_id*num_gpus) for i, (l, m, n) in enumerate(batch)]
                 pool.starmap(imagerecon, args)
    
     
     # del l_parts, m_parts, n_parts
-    
-
-
-
+    torch.cuda.empty_cache()
 
 if __name__ == "__main__":
-    # target_time = '01:00'
-    # wait_until(target_time)
-    process_period(2)
-
+    import time
+    process_period(6, 8)
+    print("第1个周期处理完成，开始处理第2个周期")
