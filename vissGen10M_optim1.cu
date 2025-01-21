@@ -59,54 +59,103 @@ struct clip_functor {
 
 // 定义计算可见度核函数, 验证一致
 __global__ void visscal(
-            int uvw_index, int lmnC_index, 
-            Complex *viss, float *u, float *v, float *w,
-            float *l, float *m, float *n, float *C,
-            Complex I1, Complex CPI, Complex zero, Complex two, 
-            float dl, float dm, float dn)
+    int uvw_index, int lmnC_index,
+    Complex* __restrict__ viss,    
+    const float* __restrict__ u,   
+    const float* __restrict__ v,
+    const float* __restrict__ w,
+    const float* __restrict__ l,
+    const float* __restrict__ m,
+    const float* __restrict__ n,
+    const float* __restrict__ C,
+    const Complex I1,             
+    const Complex CPI,
+    const Complex zero,
+    const Complex two,
+    const float dl,
+    const float dm,
+    const float dn)
 {
-    int uvw_ = blockIdx.x * blockDim.x + threadIdx.x;
-    if (uvw_ < uvw_index)
-    {   
-        for (int lmnC_ = 0; lmnC_ < lmnC_index; ++lmnC_) {
-            Complex temp;
-            Complex vari(u[uvw_]*l[lmnC_]/dl + v[uvw_]*m[lmnC_]/dm + w[uvw_]*(n[lmnC_]-1)/dn, 0.0f);
-            temp = Complex(C[lmnC_], 0.0f) * complexExp((zero - I1) * two * CPI * vari);
-            viss[uvw_] += temp;
-        } 
-        Complex cw(w[uvw_]/dn, 0.0f);
-        viss[uvw_] *= complexExp((zero-I1) * two * CPI * cw);
+    const int uvw_ = blockIdx.x * blockDim.x + threadIdx.x;
+    if (uvw_ >= uvw_index) return;
+
+    // 预先加载频繁使用的数据到寄存器
+    const float u_val = u[uvw_] / dl;
+    const float v_val = v[uvw_] / dm;
+    const float w_val = w[uvw_] / dn;
+
+    // 初始化累加器
+    Complex acc = zero;
+    // 主循环展开（编译器会进一步优化）
+    #pragma unroll 8
+    for (int lmnC_ = 0; lmnC_ < lmnC_index; ++lmnC_) {
+        // 计算相位
+        const float phase = u_val*l[lmnC_] + v_val*m[lmnC_] + w_val*(n[lmnC_]-1.0f);
+        // 计算复指数
+        const Complex exp_val = complexExp((zero - I1) * two * CPI * Complex(phase, 0.0f));
+        // 累加结果
+        acc += Complex(C[lmnC_], 0.0f) * exp_val;
     }
+    
+    // 计算最终的复指数因子
+    const Complex final_exp = complexExp((zero - I1) * two * CPI * Complex(w_val, 0.0f));
+    // 存储最终结果
+    viss[uvw_] = acc * final_exp;
 }
 
 
 // 定义图像反演核函数  验证正确
-__global__  void imagerecon(int uvw_index, int lmnC_index, 
-            Complex *F, Complex *viss, float *u, float *v, float *w,
-            float *l, float *m, float *n, float *C, float *uvwFrequencyMap,
-            Complex I1, Complex CPI, Complex zero, Complex two, 
-            float dl, float dm, float dn)
+__global__ void imagerecon(
+    const int uvw_index,
+    const int lmnC_index,
+    Complex* __restrict__ F,                    
+    const Complex* __restrict__ viss,           
+    const float* __restrict__ u,
+    const float* __restrict__ v,
+    const float* __restrict__ w,
+    const float* __restrict__ l,
+    const float* __restrict__ m,
+    const float* __restrict__ n,
+    const float* __restrict__ C,
+    const float* __restrict__ uvwFrequencyMap,
+    const Complex I1,                    
+    const Complex CPI,
+    const Complex zero,
+    const Complex two,
+    const float dl,
+    const float dm,
+    const float dn)
 {
-    Complex amount(uvw_index, 0.0);
-    
-    int lmnC_ = blockIdx.x * blockDim.x + threadIdx.x;
-    if (lmnC_ < lmnC_index){  
-        for(int uvw_=0; uvw_<uvw_index; ++uvw_)
-        {   
-            Complex temp;
-            Complex vari(u[uvw_]*l[lmnC_]/dl + v[uvw_]*m[lmnC_]/dm + w[uvw_]*n[lmnC_]/dn, 0.0f);
-            temp = uvwFrequencyMap[uvw_] * viss[uvw_] * complexExp(I1 * two * CPI * vari);
-            F[lmnC_] = F[lmnC_] + temp;
-        }
-        F[lmnC_] = F[lmnC_] / amount;
+    const int lmnC_ = blockIdx.x * blockDim.x + threadIdx.x;
+    if (lmnC_ >= lmnC_index) return;
+
+    // 预计算常量
+    const Complex amount(uvw_index, 0.0f);      // 转换为常量
+    const float l_val = l[lmnC_] / dl;
+    const float m_val = m[lmnC_] / dm;
+    const float n_val = n[lmnC_] / dn;
+
+    // 使用复数累加器
+    Complex acc = zero;
+    // 主循环
+    #pragma unroll 8
+    for (int uvw_ = 0; uvw_ < uvw_index; ++uvw_) {
+        // 计算相位
+        const float phase = u[uvw_]*l_val + v[uvw_]*m_val + w[uvw_]*n_val;
+        // 计算复指数
+        const Complex exp_val = complexExp(I1 * two * CPI * Complex(phase, 0.0f));
+        // 累加结果
+        acc += uvwFrequencyMap[uvw_] * viss[uvw_] * exp_val;
     }
+    // 归一化并存储结果
+    F[lmnC_] = acc / amount;
 }
 
 
 int vissGen(int id, int RES, int start_period) 
 {   
     cout << "res: " << RES << endl;
-    int days = 10;  // 一共有多少个周期  15月 * 30天 / 14天/周期
+    int days = 9;  // 一共有多少个周期  15月 * 30天 / 14天/周期
     cout << "periods: " << days << endl;
     Complex I1(0.0, 1.0);
     float dl = 2 * RES / (RES - 1);
@@ -143,6 +192,8 @@ int vissGen(int id, int RES, int start_period)
     address_C = lmn_address + para + sufix;
     CFile.open(address_C);
     cout << "address_C: " << address_C << endl;
+
+    
     if (!lFile.is_open() || !mFile.is_open() || !nFile.is_open() || !CFile.is_open()) {
         std::cerr << "无法打开一个或多个文件：" << std::endl;
         if (!lFile.is_open()) std::cerr << "无法打开文件: " << address_l << std::endl;
@@ -180,7 +231,7 @@ int vissGen(int id, int RES, int start_period)
         {
             cout << "for loop: " << p+1 << endl;
 
-            // 将 l m n C NX 数据从cpu搬到GPU上       
+            // 将 l m n C NX 数据从cpu搬到GPU上        
             thrust::device_vector<float> C(cC.begin(), cC.end());
             thrust::device_vector<float> l(cl.begin(), cl.end());
             thrust::device_vector<float> m(cm.begin(), cm.end());
@@ -308,7 +359,7 @@ int vissGen(int id, int RES, int start_period)
             gridSize = floor(lmnC_index + blockSize - 1) / blockSize;
             cout << "Image Reconstruction, blockSize: " << blockSize << endl;
             cout << "Image Reconstruction, girdSize: " << gridSize << endl;
-            printf("Image Reconstruction... Here is gpu %d running process %d on node %d\n",omp_get_thread_num(), p+1, id);
+            printf("Image Reconstruction... Here is gpu %d running process %d on node %d\n",omp_get_thread_num(),p+1,id);
             // 调用image_recon函数计算图像反演
             imagerecon<<<gridSize,blockSize>>>(
                 uvw_index, lmnC_index, 
@@ -352,7 +403,7 @@ int vissGen(int id, int RES, int start_period)
                 CHECK(cudaMemcpy(host_F.data(), thrust::raw_pointer_cast(F.data()), F.size() * sizeof(Complex), cudaMemcpyDeviceToHost));
                 CHECK(cudaDeviceSynchronize());
                 // 打开文件
-                string address_F = "cudaF/F" + to_string(p+1) + "period10M.txt";
+                string address_F = "F_recon_10M/F" + to_string(p+1) + "period10M_optim1.txt";
                 cout << "Period " << p+1 << " save address_F: " << address_F << endl;
                 std::ofstream file(address_F);
                 if (file.is_open()) {
