@@ -3,7 +3,7 @@ import pandas as pd
     
 def merge(lmn, l1, m1, n1, period):
     
-    values = pd.read_csv(f'F_recon_10M/F{period}period10M_optim3.txt', header=None, names=['value'])
+    values = pd.read_csv(f'F_recon_10M/F{period}period10M_optim2.txt', header=None, names=['value'])
     lmn_dup = pd.concat([l1, m1, n1, values], axis=1)
 
     print("lmn.shape = ", lmn.shape)    # (438483600, 3)
@@ -18,7 +18,7 @@ def merge(lmn, l1, m1, n1, period):
     else:
         print("最后一列不包含NaN值。")
     
-    merge_df['value'].to_csv(f'F_recon_10M/period{period}_optim3.txt', header=False, index=False)
+    merge_df['value'].to_csv(f'F_recon_10M/period{period}.txt', header=False, index=False)
     print("保存完成！")
 
 if __name__ == "__main__":
@@ -35,6 +35,6 @@ if __name__ == "__main__":
     m1 = pd.read_csv('lmn10M/m.txt', header=None, names=['m'])
     n1 = pd.read_csv('lmn10M/n.txt', header=None, names=['n'])
 
-    for p in range(11, 12):
+    for p in range(31, 51):
         print("period: ", p)
         merge(lmn, l1, m1, n1, p)
