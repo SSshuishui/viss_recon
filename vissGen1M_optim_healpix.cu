@@ -41,7 +41,7 @@ struct timeval start, finish;
 float total_time;
 
 string address = "./frequency_1M/";
-string F_address = "./F_recon_1M/";
+string F_address = "./period50_1M/";
 string para;
 string duration = "frequency1M";  // 第几个周期的uvw
 string sufix = ".txt";
@@ -53,7 +53,6 @@ const int uvw_presize = 4000000;
 #define BLOCK_SIZE 128                     // 线程块大小
 #define SHARED_MEM_SIZE BLOCK_SIZE         // 共享内存大小
 #define MAX_THREADS_PER_BLOCK 1024        // GPU每个块的最大线程数
-
 
 
 // 定义计算可见度核函数, 验证一致
@@ -78,15 +77,20 @@ __global__ void visscal(
     __shared__ float s_n[SHARED_MEM_SIZE];
     __shared__ float s_C[SHARED_MEM_SIZE];
 
+    int RES = 2094;
+    float dl = 2 * RES / (RES - 1);
+    float dm = 2 * RES / (RES - 1);
+    float dn = 2 * RES / (RES - 1);
+
     // 获取线程索引
     const int uvw_ = blockIdx.x * blockDim.x + threadIdx.x;
     const int tid = threadIdx.x;
     if (uvw_ >= uvw_index) return;
 
     // 预先加载频繁使用的数据到寄存器
-    const float u_val = u[uvw_];
-    const float v_val = v[uvw_];
-    const float w_val = w[uvw_];
+    const float u_val = u[uvw_] / dl;
+    const float v_val = v[uvw_] / dm;
+    const float w_val = w[uvw_] / dn;
 
     // 初始化累加器
     Complex acc = zero;
@@ -209,15 +213,20 @@ __global__ void imagerecon(
     __shared__ float s_uvwFreq[SHARED_MEM_SIZE];
     __shared__ Complex s_viss[SHARED_MEM_SIZE];
 
+    int RES = 2094;
+    float dl = 2 * RES / (RES - 1);
+    float dm = 2 * RES / (RES - 1);
+    float dn = 2 * RES / (RES - 1);
+
     const int lmnC_ = blockIdx.x * blockDim.x + threadIdx.x;
     const int tid = threadIdx.x;
     if (lmnC_ >= lmnC_index) return;
 
     // 预计算常量
     const Complex amount(uvw_index, 0.0f);      // 转换为常量
-    const float l_val = l[lmnC_];
-    const float m_val = m[lmnC_];
-    const float n_val = n[lmnC_];
+    const float l_val = l[lmnC_] / dl;
+    const float m_val = m[lmnC_] / dm;
+    const float n_val = n[lmnC_] / dn;
 
     // 使用复数累加器
     Complex acc = zero;
@@ -245,7 +254,7 @@ __global__ void imagerecon(
             const Complex exp_val = complexExp(I1 * two * CPI * Complex(phase, 0.0f));
 
             // 累加结果
-            acc += s_uvwFreq[i] * s_viss[i] * exp_val;
+            acc += s_uvwFreq[i] * s_viss[i] * exp_val; 
         }
 
         // 确保所有线程完成计算后再加载下一块数据
@@ -310,20 +319,20 @@ void launch_imagerecon(
 }
 
 
-int vissGen(int id, int RES, int start_period) 
+int vissGen(int id, int start_period) 
 {   
-    cout << "res: " << RES << endl;
     int days = 50;  // 一共有多少个周期  15月 * 30天 / 14天/周期
     cout << "periods: " << days << endl;
     Complex I1(0.0, 1.0);
     Complex zero(0.0, 0.0);
     Complex two(2.0, 0.0);
     Complex CPI(M_PI, 0.0);
+    
 
     gettimeofday(&start, NULL);
     int nDevices=1;
     // 设置节点数量（gpu显卡数量）
-    // CHECK(cudaGetDeviceCount(&nDevices));
+    CHECK(cudaGetDeviceCount(&nDevices));
     // 设置并行区中的线程数
     omp_set_num_threads(nDevices);
     cout << "devices: " << nDevices << endl;
@@ -343,7 +352,7 @@ int vissGen(int id, int RES, int start_period)
     address_n = address + para + sufix;
     nFile.open(address_n);
     cout << "address_n: " << address_n << endl;
-    para = "C_nest_1m";
+    para = "B_1Mhz";
     address_C = address + para + sufix;
     CFile.open(address_C);
     cout << "address_C: " << address_C << endl;
@@ -374,7 +383,7 @@ int vissGen(int id, int RES, int start_period)
     auto uvwMapStart = std::chrono::high_resolution_clock::now();
     // 创建map存储
     std::unordered_map<std::string, float> cUVWFrequencyMap;
-    string uvwmap_address = address + "uvwMap130.txt";
+    string uvwmap_address = address + "uvwMap1M_50.txt";
     std::ifstream uvwMapFile(uvwmap_address);
     if (uvwMapFile.is_open()) {
         // 读取第一行获取总行数
@@ -384,7 +393,7 @@ int vissGen(int id, int RES, int start_period)
         cout << "uvwMap totalLines: " << totalLines << endl;
         // 预分配内存
         cUVWFrequencyMap.reserve(totalLines);
-        // 每一行的格式： -23 -288 -166 4
+        // 每一行的格式： -23 -288 -150 4
         string line;
         while (std::getline(uvwMapFile, line)) {
             std::istringstream iss(line);
@@ -563,7 +572,7 @@ int vissGen(int id, int RES, int start_period)
                 thrust::raw_pointer_cast(uvwFrequencyMap.data()),
                 I1, CPI, zero, two
             );
-            cout << "Period " << p+1 << "Image Reconstruction Success!" << endl;
+            cout << "Period " << p+1 << " Image Reconstruction Success!" << endl;
             
             // 记录imagerecon结束事件
             cudaEventRecord(imagereconstop);
@@ -589,7 +598,7 @@ int vissGen(int id, int RES, int start_period)
                 thrust::host_vector<Complex> tempF = F;
 
                 std::ofstream F_File;
-                string address_F = "F_recon_1M/F" + to_string(p+1) + "_healpix.txt";
+                string address_F = "period50_1M/F" + to_string(p+1) + "_healpix_50p_fromB_absnt.txt";
                 cout << "address_F: " << address_F << endl;
                 F_File.open(address_F);
                 if (!F_File.is_open()) {
@@ -635,7 +644,6 @@ int vissGen(int id, int RES, int start_period)
 
 int main()
 {   
-    int start_period = 0;  // 从哪个周期开始，一共是130个周期
-    vissGen(0, 2094, start_period);
+    int start_period = 0;  // 从哪个周期开始，一共是50个周期
+    vissGen(0, start_period);
 }
-

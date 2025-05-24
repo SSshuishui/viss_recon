@@ -154,9 +154,9 @@ __global__ void uvwPosition(float* x, float* y, float* z, float* xt, float* yt, 
 __global__ void computeUVW(float *xt, float *yt, float *zt, thrust::tuple<float, float, float> *UVWHash, int OrbitCounts, int OrbitRes, float lambda, int m, int n) {
     int globalIdx = blockIdx.x * blockDim.x + threadIdx.x;    // OrbitCounts*OrbitRes/3  大小和xt yt zt的1/8维度一样
     int tmp = OrbitRes*OrbitCounts/3;
-    float u_val = ceil((xt[tmp * n + globalIdx] - xt[tmp * m + globalIdx]) * 1e3 / lambda);
-    float v_val = ceil((yt[tmp * n + globalIdx] - yt[tmp * m + globalIdx]) * 1e3 / lambda);
-    float w_val = ceil((zt[tmp * n + globalIdx] - zt[tmp * m + globalIdx]) * 1e3 / lambda);
+    float u_val = ceil(2*(xt[tmp * n + globalIdx] - xt[tmp * m + globalIdx]) * 1e3 / lambda) / 2;
+    float v_val = ceil(2*(yt[tmp * n + globalIdx] - yt[tmp * m + globalIdx]) * 1e3 / lambda) / 2;
+    float w_val = ceil(2*(zt[tmp * n + globalIdx] - zt[tmp * m + globalIdx]) * 1e3 / lambda) / 2;
     UVWHash[globalIdx] = thrust::make_tuple(u_val, v_val, w_val);
 }
 
@@ -418,7 +418,7 @@ void MIncline(int index, float frequency, float stride, int gpu_id) {
     thrust::host_vector<thrust::tuple<float, float, float>> h_globalUVW = globalUVW;
     // 写入到文件中
     std::ostringstream fname;
-    fname << "frequency_10M/uvw" << index << "frequency10M.txt";
+    fname << "frequency_10M/uvw" << index << "frequency10M_half.txt";
     std::ofstream file(fname.str());
     for(size_t i = 0; i < h_globalUVW.size(); i++) {
         auto& t = h_globalUVW[i];
@@ -441,16 +441,21 @@ void MIncline(int index, float frequency, float stride, int gpu_id) {
 
 
 int main()
-{
-    int periods = 130;
+{   
+    std::chrono::high_resolution_clock::time_point start_time = std::chrono::high_resolution_clock::now();
+    int periods = 50;
     float stride = 0.01;
     float frequency = 1e7;
 
     // auto pos_start = std::chrono::high_resolution_clock::now();
 
     for (int index=1; index<=periods; index++){
-        MIncline(index, frequency, stride, 1); 
+        MIncline(index, frequency, stride, 0); 
     }
+
+    std::chrono::high_resolution_clock::time_point end_time = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<float, std::milli> ms = end_time - start_time;
+    std::cout << "Time Cost: " << ms.count()/1000 << "s" << std::endl;
     
     // auto pos_end = std::chrono::high_resolution_clock::now();
     // std::chrono::duration<float, std::milli> pos_ms = pos_end - pos_start;

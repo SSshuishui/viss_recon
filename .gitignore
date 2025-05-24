@@ -34,3 +34,8 @@
 *.txt
 *.log
 *.csv
+
+F_recon_1M/*
+F_recon_10M/*
+frequency_1M/*.txt
+frequency_10M/*.txt

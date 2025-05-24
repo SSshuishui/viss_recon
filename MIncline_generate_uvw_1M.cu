@@ -150,12 +150,23 @@ __global__ void uvwPosition(double* x, double* y, double* z, double* xt, double*
     }
 }
 
+// __global__ void computeUVW(double *xt, double *yt, double *zt, thrust::tuple<double, double, double> *UVWHash, int OrbitCounts, int OrbitRes, double lambda, int m, int n) {
+//     int globalIdx = blockIdx.x * blockDim.x + threadIdx.x;    // OrbitCounts*OrbitRes/3  大小和xt yt zt的1/8维度一样
+//     int tmp = OrbitRes*OrbitCounts/3;
+//     double u_val = ceil((xt[tmp * n + globalIdx] - xt[tmp * m + globalIdx]) * 1e3 / lambda);
+//     double v_val = ceil((yt[tmp * n + globalIdx] - yt[tmp * m + globalIdx]) * 1e3 / lambda);
+//     double w_val = ceil((zt[tmp * n + globalIdx] - zt[tmp * m + globalIdx]) * 1e3 / lambda);
+//     UVWHash[globalIdx] = thrust::make_tuple(u_val, v_val, w_val);
+// }
+
+
+// 0.5取整
 __global__ void computeUVW(double *xt, double *yt, double *zt, thrust::tuple<double, double, double> *UVWHash, int OrbitCounts, int OrbitRes, double lambda, int m, int n) {
     int globalIdx = blockIdx.x * blockDim.x + threadIdx.x;    // OrbitCounts*OrbitRes/3  大小和xt yt zt的1/8维度一样
     int tmp = OrbitRes*OrbitCounts/3;
-    double u_val = ceil((xt[tmp * n + globalIdx] - xt[tmp * m + globalIdx]) * 1e3 / lambda);
-    double v_val = ceil((yt[tmp * n + globalIdx] - yt[tmp * m + globalIdx]) * 1e3 / lambda);
-    double w_val = ceil((zt[tmp * n + globalIdx] - zt[tmp * m + globalIdx]) * 1e3 / lambda);
+    double u_val = ceil(2 * (xt[tmp * n + globalIdx] - xt[tmp * m + globalIdx]) * 1e3 / lambda) / 2;
+    double v_val = ceil(2 * (yt[tmp * n + globalIdx] - yt[tmp * m + globalIdx]) * 1e3 / lambda) / 2;
+    double w_val = ceil(2 * (zt[tmp * n + globalIdx] - zt[tmp * m + globalIdx]) * 1e3 / lambda) / 2;
     UVWHash[globalIdx] = thrust::make_tuple(u_val, v_val, w_val);
 }
 
@@ -413,7 +424,7 @@ void MIncline(int index, double frequency, double stride, int gpu_id) {
     thrust::host_vector<thrust::tuple<double, double, double>> h_globalUVW = globalUVW;
     // 写入到文件中
     std::ostringstream fname;
-    fname << "frequency_1M/uvw" << index << "frequency1M.txt";
+    fname << "frequency_1M/uvw" << index << "frequency1M_half.txt";
     std::ofstream file(fname.str());
     for(size_t i = 0; i < h_globalUVW.size(); i++) {
         auto& t = h_globalUVW[i];
@@ -436,20 +447,23 @@ void MIncline(int index, double frequency, double stride, int gpu_id) {
 
 
 int main()
-{
-    int periods = 130;
+{   
+    // 一张卡的时间
+    auto start_time = std::chrono::high_resolution_clock::now();
+    int periods = 50;
     double stride = 0.1;
     double frequency = 1e6;
 
     // auto pos_start = std::chrono::high_resolution_clock::now();
 
     for (int index=1; index<=periods; index++){
-        MIncline(index, frequency, stride, 0); 
+        MIncline(index, frequency, stride, 1); 
     }
+
     
-    // auto pos_end = std::chrono::high_resolution_clock::now();
-    // std::chrono::duration<double, std::milli> pos_ms = pos_end - pos_start;
-    // std::cout << "Position Generated in " << pos_ms.count()/1000 << "s" << std::endl;
+    auto end_time = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double, std::milli> pos_ms = end_time - start_time;
+    std::cout << "Time Cost: " << pos_ms.count()/1000 << "s" << std::endl;
 
     // int nDevices;
     // CHECK(cudaGetDeviceCount(&nDevices));

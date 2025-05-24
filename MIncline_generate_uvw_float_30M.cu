@@ -262,9 +262,9 @@ __global__ void uvwPosition_Z(float* z, float* zt, long OrbitCounts, long OrbitR
 __global__ void computeUVW(float *xt, float *yt, float *zt, thrust::tuple<float, float, float> *UVWHash, long OrbitCounts, long OrbitRes, long lambda, int m, int n) {
     long globalIdx = blockIdx.x * blockDim.x + threadIdx.x;    // OrbitCounts*OrbitRes/3  大小和xt yt zt的1/8维度一样
     long tmp = OrbitRes*OrbitCounts/3;
-    float u_val = ceil((xt[tmp * n + globalIdx] - xt[tmp * m + globalIdx]) * 1e3 / lambda);
-    float v_val = ceil((yt[tmp * n + globalIdx] - yt[tmp * m + globalIdx]) * 1e3 / lambda);
-    float w_val = ceil((zt[tmp * n + globalIdx] - zt[tmp * m + globalIdx]) * 1e3 / lambda);
+    float u_val = ceil(2*(xt[tmp * n + globalIdx] - xt[tmp * m + globalIdx]) * 1e3 / lambda) /2;
+    float v_val = ceil(2*(yt[tmp * n + globalIdx] - yt[tmp * m + globalIdx]) * 1e3 / lambda) /2;
+    float w_val = ceil(2*(zt[tmp * n + globalIdx] - zt[tmp * m + globalIdx]) * 1e3 / lambda) /2;
     UVWHash[globalIdx] = thrust::make_tuple(u_val, v_val, w_val);
 }
 

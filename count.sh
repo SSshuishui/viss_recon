@@ -63,10 +63,10 @@
 # 初始化最大行数变量
 max_lines=0
 
-for j in {1..130}
+for j in {1..50}
 do
     # 构建文件名
-    file="frequency_10M/updated_uvw${j}frequency10M.txt"
+    file="sin30_frequency_10M/uvw${j}frequency10M_half_sin30.txt"
 
     # 检查文件是否存在
     if [ -f "$file" ]; then
